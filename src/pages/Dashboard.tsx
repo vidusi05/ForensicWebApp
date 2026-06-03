@@ -1,6 +1,10 @@
 import { Users, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { mockCases } from '../data/mockData';
 
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const stats = [
     { name: 'Active Cases', value: '124', icon: Users, color: 'text-blue-600', bg: 'bg-blue-100' },
     { name: 'Pending Reports', value: '12', icon: FileText, color: 'text-amber-600', bg: 'bg-amber-100' },
@@ -51,19 +55,27 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-5 border-b border-slate-200 flex justify-between items-center bg-slate-50/50">
             <h3 className="text-base font-semibold leading-6 text-slate-900">Recent Cases</h3>
-            <button className="text-sm font-medium text-primary-600 hover:text-primary-700">View all</button>
+            <button onClick={() => navigate('/cases')} className="text-sm font-medium text-primary-600 hover:text-primary-700">View all</button>
           </div>
           <div className="divide-y divide-slate-200">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="px-6 py-4 hover:bg-slate-50 transition-colors">
+            {mockCases.slice(0, 4).map((c) => (
+              <div 
+                key={c.id} 
+                className="px-6 py-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                onClick={() => navigate(`/cases/${c.id}`)}
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex flex-col">
-                    <p className="text-sm font-medium text-slate-900">Case #{202600 + i}</p>
-                    <p className="text-sm text-slate-500">Patient: John Doe • Clinical Forensic</p>
+                    <p className="text-sm font-medium text-slate-900">Case #{c.id}</p>
+                    <p className="text-sm text-slate-500">Patient: {c.patientName} • {c.type}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                      Pending PMR
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+                      c.status === 'Active' ? 'bg-green-50 text-green-700 ring-green-600/20' : 
+                      c.status === 'Closed' ? 'bg-slate-100 text-slate-700 ring-slate-600/20' :
+                      'bg-amber-50 text-amber-700 ring-amber-600/20'
+                    }`}>
+                      {c.status}
                     </span>
                   </div>
                 </div>

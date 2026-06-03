@@ -1,8 +1,15 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Filter, MoreVertical } from 'lucide-react';
+import { mockCases } from '../../data/mockData';
 
 export default function CaseManagement() {
   const [activeTab, setActiveTab] = useState<'clinical' | 'autopsy'>('clinical');
+  const navigate = useNavigate();
+
+  const filteredCases = mockCases.filter(c => 
+    activeTab === 'clinical' ? c.type === 'Clinical Forensic' : c.type === 'Autopsy'
+  );
 
   return (
     <div className="space-y-6">
@@ -91,29 +98,44 @@ export default function CaseManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-200">
-              {[1, 2, 3, 4, 5].map((idx) => (
-                <tr key={idx} className="hover:bg-slate-50 transition-colors group cursor-pointer">
+              {filteredCases.map((c) => (
+                <tr 
+                  key={c.id} 
+                  className="hover:bg-slate-50 transition-colors group cursor-pointer"
+                  onClick={() => navigate(`/cases/${c.id}`)}
+                >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
-                    #{202600 + idx}
+                    #{c.id}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    Jane Doe {idx}
+                    {c.patientName}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    Jun {idx}, 2026
+                    {c.date}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
-                      Active
+                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+                      c.status === 'Active' ? 'bg-green-50 text-green-700 ring-green-600/20' : 
+                      c.status === 'Closed' ? 'bg-slate-100 text-slate-700 ring-slate-600/20' :
+                      'bg-amber-50 text-amber-700 ring-amber-600/20'
+                    }`}>
+                      {c.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-slate-400 hover:text-slate-600 transition-colors">
+                    <button className="text-slate-400 hover:text-slate-600 transition-colors" onClick={(e) => e.stopPropagation()}>
                       <MoreVertical className="h-5 w-5" />
                     </button>
                   </td>
                 </tr>
               ))}
+              {filteredCases.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">
+                    No cases found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

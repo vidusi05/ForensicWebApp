@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Files, 
@@ -7,8 +7,11 @@ import {
   Bell, 
   Settings,
   Search,
-  UserCircle
+  UserCircle,
+  LogOut,
+  ShieldAlert
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -19,6 +22,13 @@ const navigation = [
 
 export default function DashboardLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
@@ -58,10 +68,20 @@ export default function DashboardLayout() {
           })}
         </nav>
         
-        <div className="p-4 border-t border-slate-200">
-          <button className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors">
+        <div className="p-4 border-t border-slate-200 space-y-1">
+          {user?.role === 'System Administrator' && (
+            <Link to="/audit" className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors">
+              <ShieldAlert className="mr-3 h-5 w-5 text-slate-400" />
+              Audit Logs
+            </Link>
+          )}
+          <Link to="/settings" className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors">
             <Settings className="mr-3 h-5 w-5 text-slate-400" />
             Settings
+          </Link>
+          <button onClick={handleLogout} className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors mt-2">
+            <LogOut className="mr-3 h-5 w-5 text-red-500" />
+            Logout
           </button>
         </div>
       </div>
@@ -89,10 +109,10 @@ export default function DashboardLayout() {
               <Bell className="h-6 w-6" />
             </button>
             
-            <div className="flex items-center gap-2 border-l border-slate-200 pl-4 cursor-pointer">
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-4 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-slate-700 leading-none">Dr. A. Perera</p>
-                <p className="text-xs text-slate-500 mt-1">Consultant JMO</p>
+                <p className="text-sm font-medium text-slate-700 leading-none">{user?.name || 'User'}</p>
+                <p className="text-xs text-slate-500 mt-1">{user?.role || 'Guest'}</p>
               </div>
               <UserCircle className="h-8 w-8 text-slate-400" />
             </div>
