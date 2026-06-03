@@ -4,4 +4,5 @@ Made by Team FourCells for CO2050 DB Project in accordance with the Forensic Sci
 Run instructions: 
 
 npm install
+
 npm run dev
