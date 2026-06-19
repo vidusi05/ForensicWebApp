@@ -1,15 +1,93 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Filter, MoreVertical } from 'lucide-react';
-import { mockCases } from '../../data/mockData';
+import { Search, Plus, Filter, MoreVertical, X } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function CaseManagement() {
   const [activeTab, setActiveTab] = useState<'clinical' | 'autopsy'>('clinical');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cases, setCases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  const filteredCases = mockCases.filter(c => 
-    activeTab === 'clinical' ? c.type === 'Clinical Forensic' : c.type === 'Autopsy'
-  );
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [patientName, setPatientName] = useState('');
+  const [newCaseType, setNewCaseType] = useState<'Clinical Forensic' | 'Autopsy'>('Clinical Forensic');
+  const [newCaseDate, setNewCaseDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDoctorId, setSelectedDoctorId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Fetch cases
+  const fetchCases = () => {
+    setLoading(true);
+    const typeQuery = activeTab === 'clinical' ? 'Clinical Forensic' : 'Autopsy';
+    fetch(`/api/cases?type=${encodeURIComponent(typeQuery)}&search=${encodeURIComponent(searchQuery)}`)
+      .then(res => res.json())
+      .then(data => {
+        setCases(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    fetchCases();
+  }, [activeTab, searchQuery]);
+
+  // Fetch doctors for the dropdown
+  useEffect(() => {
+    fetch('/api/doctors')
+      .then(res => res.json())
+      .then(data => {
+        setDoctors(data);
+        if (data.length > 0) {
+          setSelectedDoctorId(data[0].id);
+        }
+      })
+      .catch(err => console.error(err));
+  }, []);
+
+  const handleCreateCase = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patientName || !selectedDoctorId) return;
+
+    setSubmitting(true);
+    fetch('/api/cases', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: newCaseType,
+        patientName,
+        date: newCaseDate,
+        doctorId: selectedDoctorId,
+        username: user?.name
+      })
+    })
+      .then(res => res.json())
+      .then(() => {
+        setIsModalOpen(false);
+        setPatientName('');
+        setSubmitting(false);
+        const newCaseTab = newCaseType === 'Clinical Forensic' ? 'clinical' : 'autopsy';
+        if (activeTab === newCaseTab) {
+          fetchCases();
+        } else {
+          setActiveTab(newCaseTab);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        setSubmitting(false);
+      });
+  };
 
   return (
     <div className="space-y-6">
@@ -23,6 +101,7 @@ export default function CaseManagement() {
         <div className="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
           <button
             type="button"
+            onClick={() => setIsModalOpen(true)}
             className="flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 transition-colors"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -65,8 +144,10 @@ export default function CaseManagement() {
             </div>
             <input
               type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="block w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
-              placeholder={`Search ${activeTab} cases by ID, name, or MLEF...`}
+              placeholder={`Search ${activeTab} cases by ID or patient name...`}
             />
           </div>
           <button className="flex items-center px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 bg-white hover:bg-slate-50 transition-colors">
@@ -90,6 +171,9 @@ export default function CaseManagement() {
                   Date
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                  Doctor
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th scope="col" className="relative px-6 py-3">
@@ -98,7 +182,13 @@ export default function CaseManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-200">
-              {filteredCases.map((c) => (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500">
+                    Loading cases...
+                  </td>
+                </tr>
+              ) : cases.map((c) => (
                 <tr 
                   key={c.id} 
                   className="hover:bg-slate-50 transition-colors group cursor-pointer"
@@ -112,6 +202,9 @@ export default function CaseManagement() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                     {c.date}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                    {c.doctor}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset ${
@@ -129,9 +222,9 @@ export default function CaseManagement() {
                   </td>
                 </tr>
               ))}
-              {filteredCases.length === 0 && (
+              {!loading && cases.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-sm text-slate-500">
                     No cases found.
                   </td>
                 </tr>
@@ -140,6 +233,89 @@ export default function CaseManagement() {
           </table>
         </div>
       </div>
+
+      {/* New Case Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-semibold text-slate-950">Register New Forensic Case</h3>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-500 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateCase} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Subject Name</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="e.g. John Doe"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  value={patientName}
+                  onChange={(e) => setPatientName(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Case Type</label>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  value={newCaseType}
+                  onChange={(e) => setNewCaseType(e.target.value as any)}
+                >
+                  <option value="Clinical Forensic">Clinical Forensic</option>
+                  <option value="Autopsy">Autopsy</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Date Registered</label>
+                <input 
+                  type="date" 
+                  required
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  value={newCaseDate}
+                  onChange={(e) => setNewCaseDate(e.target.value)}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Assigned Doctor</label>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  value={selectedDoctorId}
+                  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                >
+                  {doctors.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={submitting}
+                  className="px-4 py-2 bg-primary-600 rounded-lg text-sm font-medium text-white hover:bg-primary-500 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Registering...' : 'Register Case'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

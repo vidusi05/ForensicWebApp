@@ -12,7 +12,7 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (email: string, role: UserRole) => void;
+  login: (email: string, role: UserRole, password?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -33,16 +33,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = (email: string, role: UserRole) => {
-    const mockUser: User = {
-      id: 'usr_' + Math.random().toString(36).substr(2, 9),
-      name: email.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      role,
-      email
-    };
-    setUser(mockUser);
-    localStorage.setItem('forensic_user', JSON.stringify(mockUser));
+  const login = async (email: string, role: UserRole, password?: string) => {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ email, role, password: password || 'password123' })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Authentication failed');
+    }
+
+    const dbUser: User = await response.json();
+    setUser(dbUser);
+    localStorage.setItem('forensic_user', JSON.stringify(dbUser));
   };
+
 
   const logout = () => {
     setUser(null);

@@ -6,16 +6,28 @@ import { Activity } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('Consultant JMO');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (email) {
-      login(email, role);
-      navigate('/dashboard');
+      setError(null);
+      setLoading(true);
+      try {
+        await login(email, role, password);
+        navigate('/dashboard');
+      } catch (err: any) {
+        setError(err.message || 'Login failed');
+      } finally {
+        setLoading(false);
+      }
     }
   };
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -30,7 +42,13 @@ export default function Login() {
           <p className="mt-2 text-center text-sm text-slate-500">
             Forensic Medicine Department Database
           </p>
+          {error && (
+            <div className="mt-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm text-center font-medium border border-red-200">
+              {error}
+            </div>
+          )}
         </div>
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-4 rounded-md shadow-sm">
             <div>
@@ -75,19 +93,25 @@ export default function Login() {
                 id="password"
                 name="password"
                 type="password"
+                required
                 className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-slate-300 placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Any password works for mock"
+                placeholder="Enter password (e.g. password123)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
               />
             </div>
+
           </div>
 
           <div>
             <button
               type="submit"
-              className="group relative w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
+              disabled={loading}
+              className="group relative w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors disabled:opacity-50"
             >
-              Sign in
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
+
           </div>
         </form>
       </div>
