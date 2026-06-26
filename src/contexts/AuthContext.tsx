@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type UserRole = 'Consultant JMO' | 'Medical Officer' | 'Forensic Support Staff' | 'Data Entry Operator' | 'System Administrator';
+export type UserRole = 'Consultant JMO' | 'Medical Officer' | 'Forensic Support Staff' | 'Data Entry Operator' | 'Hospital Administration' | 'System Administrator';
 
 export interface User {
   id: string;
   name: string;
   role: UserRole;
   email: string;
+  token: string;
 }
 
 interface AuthContextType {
@@ -27,7 +28,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (storedUser) {
       try {
         setUser(JSON.parse(storedUser));
-      } catch (e) {
+      } catch {
         localStorage.removeItem('forensic_user');
       }
     }
@@ -39,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ email, role, password: password || 'password123' })
+      body: JSON.stringify({ email, role, password })
     });
 
     if (!response.ok) {

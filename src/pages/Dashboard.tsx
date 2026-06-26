@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Users, FileText, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../lib/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -20,16 +21,18 @@ export default function Dashboard() {
     upcomingSummons: []
   });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/dashboard/stats')
-      .then(res => res.json())
+    apiFetch<typeof data>('/api/dashboard/stats')
       .then(resData => {
         setData(resData);
+        setError(null);
         setLoading(false);
       })
       .catch(err => {
         console.error('Error fetching dashboard stats:', err);
+        setError(err.message || 'Unable to load dashboard');
         setLoading(false);
       });
   }, []);
@@ -50,6 +53,12 @@ export default function Dashboard() {
           Overview of departmental activities and pending tasks.
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 
 dotenv.config();
 
@@ -57,6 +58,15 @@ async function createTables() {
       nic VARCHAR(30),
       contact_no VARCHAR(20),
       age INT
+    )
+  `);
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS person_contact (
+      person_id VARCHAR(50) NOT NULL,
+      contact_no VARCHAR(20) NOT NULL,
+      PRIMARY KEY (person_id, contact_no),
+      FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE CASCADE
     )
   `);
 
@@ -221,7 +231,31 @@ async function createTables() {
       scanned_copy VARCHAR(255),
       media_type VARCHAR(100),
       uploaded_at VARCHAR(100),
+      uploaded_by VARCHAR(50),
+      mime_type VARCHAR(100),
+      original_filename VARCHAR(255),
       FOREIGN KEY (case_id) REFERENCES investigation_cases(case_id) ON DELETE CASCADE
+    )
+  `);
+
+  await ensureColumn(p, 'media', 'uploaded_by', 'VARCHAR(50)');
+  await ensureColumn(p, 'media', 'mime_type', 'VARCHAR(100)');
+  await ensureColumn(p, 'media', 'original_filename', 'VARCHAR(255)');
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS doctor_media (
+      person_id VARCHAR(50) NOT NULL,
+      media_id VARCHAR(50) NOT NULL,
+      PRIMARY KEY (person_id, media_id),
+      FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE CASCADE,
+      FOREIGN KEY (media_id) REFERENCES media(media_id) ON DELETE CASCADE
+    )
+  `);
+
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS judge (
+      judge_id VARCHAR(50) PRIMARY KEY,
+      judge_name VARCHAR(255) NOT NULL
     )
   `);
 
@@ -247,7 +281,35 @@ async function createTables() {
     )
   `);
 
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS reports_meta (
+      id VARCHAR(50) PRIMARY KEY,
+      case_id VARCHAR(50) NOT NULL,
+      type VARCHAR(50) NOT NULL,
+      status VARCHAR(50) NOT NULL,
+      date VARCHAR(100) NOT NULL,
+      FOREIGN KEY (case_id) REFERENCES investigation_cases(case_id) ON DELETE CASCADE
+    )
+  `);
+
   console.log('Tables created or verified successfully.');
+}
+
+async function ensureColumn(pool, tableName, columnName, definition) {
+  const [rows] = await pool.query(
+    `
+      SELECT COUNT(*) AS count
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+    `,
+    [tableName, columnName]
+  );
+
+  if (rows[0].count === 0) {
+    await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`);
+  }
 }
 
 async function seedData() {
@@ -265,6 +327,7 @@ async function seedData() {
       ['p_op1', 'Data Entry Operator', 'Female', '1995-10-10', '199545678V', '0774567890', 31],
       ['p_admin1', 'System Administrator', 'Male', '1990-01-01', '199056789V', '0775678901', 36],
       ['p_staff1', 'Forensic Support Staff', 'Female', '1993-04-05', '199367890V', '0776789012', 33],
+      ['p_admin2', 'Hospital Administrator', 'Female', '1989-03-11', '198934567V', '0771112233', 37],
       ['p_pat1', 'John Doe', 'Male', '1990-01-15', '199011122V', '0779998887', 36],
       ['p_pat2', 'Michael Brown', 'Male', '1988-07-22', '198822334V', '0778887776', 37]
     ];
@@ -317,27 +380,17 @@ async function seedData() {
     );
 
     const mediaItems = [
-      ['ev1', '2026101', 'image', 'Crime_Scene_1.jpg', '2.4 MB', '2026-06-01 10:00 AM'],
-      ['ev2', '2026101', 'document', 'MLEF_Draft.pdf', '1.2 MB', '2026-06-01 11:30 AM'],
-      ['ev3', '2026102', 'document', 'Toxicology_Report.pdf', '840 KB', '2026-06-02 02:00 PM']
+      ['ev1', '2026101', 'image', 'Crime_Scene_1.jpg', '2.4 MB', '2026-06-01 10:00 AM', 'u1', 'image/jpeg', 'Crime_Scene_1.jpg'],
+      ['ev2', '2026101', 'document', 'MLEF_Draft.pdf', '1.2 MB', '2026-06-01 11:30 AM', 'u1', 'application/pdf', 'MLEF_Draft.pdf'],
+      ['ev3', '2026102', 'document', 'Toxicology_Report.pdf', '840 KB', '2026-06-02 02:00 PM', 'u2', 'application/pdf', 'Toxicology_Report.pdf']
     ];
     for (const m of mediaItems) {
       await p.query(
-        'INSERT INTO media (media_id, case_id, doc_type, scanned_copy, media_type, uploaded_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO media (media_id, case_id, doc_type, scanned_copy, media_type, uploaded_at, uploaded_by, mime_type, original_filename) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         m
       );
     }
 
-    await p.query(`
-      CREATE TABLE IF NOT EXISTS reports_meta (
-        id VARCHAR(50) PRIMARY KEY,
-        case_id VARCHAR(50) NOT NULL,
-        type VARCHAR(50) NOT NULL,
-        status VARCHAR(50) NOT NULL,
-        date VARCHAR(100) NOT NULL,
-        FOREIGN KEY (case_id) REFERENCES investigation_cases(case_id) ON DELETE CASCADE
-      )
-    `);
     await p.query('INSERT INTO reports_meta (id, case_id, type, status, date) VALUES (?, ?, ?, ?, ?)', ['rep1', '2026101', 'MLEF', 'Drafted', '2026-06-01']);
     await p.query('INSERT INTO reports_meta (id, case_id, type, status, date) VALUES (?, ?, ?, ?, ?)', ['rep2', '2026102', 'PMR', 'Pending Signature', '2026-06-02']);
 
@@ -350,13 +403,15 @@ async function seedData() {
       await p.query('INSERT INTO audit_logs (id, action, user_name, timestamp, details) VALUES (?, ?, ?, ?, ?)', log);
     }
 
+    const defaultPasswordHash = await bcrypt.hash(process.env.SEED_USER_PASSWORD || 'password123', 12);
     const users = [
-      ['u1', 'Dr. A. Perera', 'Consultant JMO', 'perera@hospital.gov', 'password123', 'p_doc1'],
-      ['u2', 'Dr. B. Silva', 'Medical Officer', 'silva@hospital.gov', 'password123', 'p_doc2'],
-      ['u3', 'Dr. C. Fernando', 'Consultant JMO', 'fernando@hospital.gov', 'password123', 'p_doc3'],
-      ['u4', 'Data Entry Operator', 'Data Entry Operator', 'operator@hospital.gov', 'password123', 'p_op1'],
-      ['u5', 'System Administrator', 'System Administrator', 'admin@hospital.gov', 'password123', 'p_admin1'],
-      ['u6', 'Forensic Support Staff', 'Forensic Support Staff', 'staff@hospital.gov', 'password123', 'p_staff1']
+      ['u1', 'Dr. A. Perera', 'Consultant JMO', 'perera@hospital.gov', defaultPasswordHash, 'p_doc1'],
+      ['u2', 'Dr. B. Silva', 'Medical Officer', 'silva@hospital.gov', defaultPasswordHash, 'p_doc2'],
+      ['u3', 'Dr. C. Fernando', 'Consultant JMO', 'fernando@hospital.gov', defaultPasswordHash, 'p_doc3'],
+      ['u4', 'Data Entry Operator', 'Data Entry Operator', 'operator@hospital.gov', defaultPasswordHash, 'p_op1'],
+      ['u5', 'System Administrator', 'System Administrator', 'admin@hospital.gov', defaultPasswordHash, 'p_admin1'],
+      ['u6', 'Forensic Support Staff', 'Forensic Support Staff', 'staff@hospital.gov', defaultPasswordHash, 'p_staff1'],
+      ['u7', 'Hospital Administrator', 'Hospital Administration', 'hospital-admin@hospital.gov', defaultPasswordHash, 'p_admin2']
     ];
     for (const user of users) {
       await p.query(

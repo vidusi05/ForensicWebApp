@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Database, User, Calendar, Activity, X, Printer, ShieldCheck, Download, ExternalLink, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiFetch } from '../../lib/api';
 
 export default function CaseDetails() {
   const { id } = useParams<{ id: string }>();
@@ -12,6 +13,7 @@ export default function CaseDetails() {
   const [reports, setReports] = useState<any[]>([]);
   const [summons, setSummons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Modals state
   const [isEvidenceModalOpen, setIsEvidenceModalOpen] = useState(false);
@@ -36,32 +38,29 @@ export default function CaseDetails() {
   const [selectedEvidenceForPreview, setSelectedEvidenceForPreview] = useState<any>(null);
   const [selectedReportForPreview, setSelectedReportForPreview] = useState<any>(null);
 
-  const fetchCaseDetails = () => {
+  const fetchCaseDetails = useCallback(() => {
+    if (!id) return;
     setLoading(true);
-    fetch(`/api/cases/${id}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Case not found');
-        return res.json();
-      })
+    apiFetch<any>(`/api/cases/${id}`)
       .then(data => {
         setCaseData(data.caseData);
         setEvidence(data.evidence);
         setReports(data.reports);
         setSummons(data.summons || []);
         setSelectedStatus(data.caseData.status);
+        setError(null);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to load case details');
         setLoading(false);
       });
-  };
+  }, [id]);
 
   useEffect(() => {
-    if (id) {
-      fetchCaseDetails();
-    }
-  }, [id]);
+    fetchCaseDetails();
+  }, [fetchCaseDetails]);
 
   const handleAddEvidence = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,22 +72,20 @@ export default function CaseDetails() {
     formData.append('file', selectedFile);
     formData.append('username', user?.name || '');
 
-    fetch('/api/evidence', {
+    apiFetch<any>('/api/evidence', {
       method: 'POST',
       body: formData
     })
-      .then(res => {
-        if (!res.ok) throw new Error('Upload failed');
-        return res.json();
-      })
       .then(() => {
         setIsEvidenceModalOpen(false);
         setSelectedFile(null);
+        setError(null);
         setSubmittingEvidence(false);
         fetchCaseDetails();
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Upload failed');
         setSubmittingEvidence(false);
       });
   };
@@ -97,25 +94,22 @@ export default function CaseDetails() {
     e.preventDefault();
     setGeneratingReport(true);
 
-    fetch('/api/reports', {
+    apiFetch<any>('/api/reports', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         caseId: id,
         type: reportType,
         username: user?.name
       })
-    })
-      .then(res => res.json())
-      .then(() => {
+    }).then(() => {
         setIsReportModalOpen(false);
+        setError(null);
         setGeneratingReport(false);
         fetchCaseDetails();
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to generate report');
         setGeneratingReport(false);
       });
   };
@@ -124,24 +118,21 @@ export default function CaseDetails() {
     e.preventDefault();
     setUpdatingStatus(true);
 
-    fetch(`/api/cases/${id}/status`, {
+    apiFetch<any>(`/api/cases/${id}/status`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         status: selectedStatus,
         username: user?.name
       })
-    })
-      .then(res => res.json())
-      .then(() => {
+    }).then(() => {
         setIsStatusModalOpen(false);
+        setError(null);
         setUpdatingStatus(false);
         fetchCaseDetails();
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to update status');
         setUpdatingStatus(false);
       });
   };
@@ -152,11 +143,8 @@ export default function CaseDetails() {
 
     setSubmittingSummon(true);
 
-    fetch('/api/summons', {
+    apiFetch<any>('/api/summons', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         caseId: id,
         whoIssued,
@@ -164,23 +152,20 @@ export default function CaseDetails() {
         dateOfIssue,
         username: user?.name
       })
+    }).then(() => {
+      setIsSummonModalOpen(false);
+      setWhoIssued('');
+      setCourtDate('');
+      setDateOfIssue('');
+      setError(null);
+      setSubmittingSummon(false);
+      fetchCaseDetails();
     })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to link summon');
-        return res.json();
-      })
-      .then(() => {
-        setIsSummonModalOpen(false);
-        setWhoIssued('');
-        setCourtDate('');
-        setDateOfIssue('');
-        setSubmittingSummon(false);
-        fetchCaseDetails();
-      })
-      .catch(err => {
-        console.error(err);
-        setSubmittingSummon(false);
-      });
+    .catch(err => {
+      console.error(err);
+      setError(err.message || 'Failed to link summon');
+      setSubmittingSummon(false);
+    });
   };
 
   const handlePrint = () => {
@@ -210,6 +195,12 @@ export default function CaseDetails() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

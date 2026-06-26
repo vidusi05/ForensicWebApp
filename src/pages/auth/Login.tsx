@@ -69,7 +69,7 @@ export default function Login() {
             </div>
             <div>
               <label htmlFor="role" className="block text-sm font-medium text-slate-700 mb-1">
-                Role (Mock Auth)
+                Role
               </label>
               <select
                 id="role"
@@ -82,6 +82,7 @@ export default function Login() {
                 <option value="Medical Officer">Medical Officer</option>
                 <option value="Forensic Support Staff">Forensic Support Staff</option>
                 <option value="Data Entry Operator">Data Entry Operator</option>
+                <option value="Hospital Administration">Hospital Administration</option>
                 <option value="System Administrator">System Administrator</option>
               </select>
             </div>
@@ -95,7 +96,7 @@ export default function Login() {
                 type="password"
                 required
                 className="appearance-none rounded-lg relative block w-full px-3 py-2 border border-slate-300 placeholder-slate-400 text-slate-900 focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Enter password (e.g. password123)"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />

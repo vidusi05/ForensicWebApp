@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { FileText, Download, Printer, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiFetch } from '../../lib/api';
 
 export default function Reporting() {
   const [reports, setReports] = useState<any[]>([]);
@@ -21,8 +22,7 @@ export default function Reporting() {
 
   const fetchReports = () => {
     setLoading(true);
-    fetch('/api/reports')
-      .then(res => res.json())
+    apiFetch<any[]>('/api/reports')
       .then(data => {
         setReports(data);
         setLoading(false);
@@ -41,11 +41,7 @@ export default function Reporting() {
   useEffect(() => {
     if (selectedReportForPreview) {
       setLoadingPreview(true);
-      fetch(`/api/cases/${selectedReportForPreview.caseId}`)
-        .then(res => {
-          if (!res.ok) throw new Error('Case details not found');
-          return res.json();
-        })
+      apiFetch<any>(`/api/cases/${selectedReportForPreview.caseId}`)
         .then(data => {
           setPreviewCaseData(data.caseData);
           setLoadingPreview(false);
@@ -66,30 +62,17 @@ export default function Reporting() {
     setSubmitting(true);
 
     // Verify case exists first
-    fetch(`/api/cases/${caseId}`)
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Case #${caseId} does not exist.`);
-        }
-        return res.json();
-      })
+    apiFetch<any>(`/api/cases/${caseId}`)
       .then(() => {
         // Create report
-        return fetch('/api/reports', {
+        return apiFetch<any>('/api/reports', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify({
             caseId,
             type: reportType,
             username: user?.name
           })
         });
-      })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to create report.');
-        return res.json();
       })
       .then(() => {
         setCaseId('');

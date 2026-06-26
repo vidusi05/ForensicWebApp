@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Plus, Filter, MoreVertical, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiFetch } from '../../lib/api';
 
 export default function CaseManagement() {
   const [activeTab, setActiveTab] = useState<'clinical' | 'autopsy'>('clinical');
   const [searchQuery, setSearchQuery] = useState('');
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<any[]>([]);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -21,29 +23,29 @@ export default function CaseManagement() {
   const [submitting, setSubmitting] = useState(false);
 
   // Fetch cases
-  const fetchCases = () => {
+  const fetchCases = useCallback(() => {
     setLoading(true);
     const typeQuery = activeTab === 'clinical' ? 'Clinical Forensic' : 'Autopsy';
-    fetch(`/api/cases?type=${encodeURIComponent(typeQuery)}&search=${encodeURIComponent(searchQuery)}`)
-      .then(res => res.json())
+    apiFetch<any[]>(`/api/cases?type=${encodeURIComponent(typeQuery)}&search=${encodeURIComponent(searchQuery)}`)
       .then(data => {
         setCases(data);
+        setError(null);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to load cases');
         setLoading(false);
       });
-  };
+  }, [activeTab, searchQuery]);
 
   useEffect(() => {
     fetchCases();
-  }, [activeTab, searchQuery]);
+  }, [fetchCases]);
 
   // Fetch doctors for the dropdown
   useEffect(() => {
-    fetch('/api/doctors')
-      .then(res => res.json())
+    apiFetch<any[]>('/api/doctors')
       .then(data => {
         setDoctors(data);
         if (data.length > 0) {
@@ -58,11 +60,8 @@ export default function CaseManagement() {
     if (!patientName || !selectedDoctorId) return;
 
     setSubmitting(true);
-    fetch('/api/cases', {
+    apiFetch<any>('/api/cases', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
       body: JSON.stringify({
         type: newCaseType,
         patientName,
@@ -70,11 +69,10 @@ export default function CaseManagement() {
         doctorId: selectedDoctorId,
         username: user?.name
       })
-    })
-      .then(res => res.json())
-      .then(() => {
+    }).then(() => {
         setIsModalOpen(false);
         setPatientName('');
+        setError(null);
         setSubmitting(false);
         const newCaseTab = newCaseType === 'Clinical Forensic' ? 'clinical' : 'autopsy';
         if (activeTab === newCaseTab) {
@@ -85,6 +83,7 @@ export default function CaseManagement() {
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to create case');
         setSubmitting(false);
       });
   };
@@ -109,6 +108,12 @@ export default function CaseManagement() {
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Tabs and Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200">

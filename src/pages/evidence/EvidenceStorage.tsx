@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { UploadCloud, ImageIcon, FileText, X, ShieldCheck, Download, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { apiFetch } from '../../lib/api';
 
 export default function EvidenceStorage() {
   const [evidenceList, setEvidenceList] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
   // Upload Modal State
@@ -19,14 +21,15 @@ export default function EvidenceStorage() {
 
   const fetchEvidence = () => {
     setLoading(true);
-    fetch('/api/evidence')
-      .then(res => res.json())
+    apiFetch<any[]>('/api/evidence')
       .then(data => {
         setEvidenceList(data);
+        setError(null);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to load evidence');
         setLoading(false);
       });
   };
@@ -35,8 +38,7 @@ export default function EvidenceStorage() {
     fetchEvidence();
 
     // Fetch cases for linking
-    fetch('/api/cases')
-      .then(res => res.json())
+    apiFetch<any[]>('/api/cases')
       .then(data => {
         setCases(data);
         if (data.length > 0) {
@@ -56,22 +58,20 @@ export default function EvidenceStorage() {
     formData.append('file', selectedFile);
     formData.append('username', user?.name || '');
 
-    fetch('/api/evidence', {
+    apiFetch<any>('/api/evidence', {
       method: 'POST',
       body: formData
     })
-      .then(res => {
-        if (!res.ok) throw new Error('Upload failed');
-        return res.json();
-      })
       .then(() => {
         setIsModalOpen(false);
         setSelectedFile(null);
+        setError(null);
         setSubmitting(false);
         fetchEvidence();
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Upload failed');
         setSubmitting(false);
       });
   };
@@ -84,6 +84,12 @@ export default function EvidenceStorage() {
           Securely upload and manage medico-legal documents and digital evidence.
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Upload Section */}

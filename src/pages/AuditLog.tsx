@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
 import { ShieldAlert, Activity, FileText } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 export default function AuditLog() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/api/audit-logs')
-      .then(res => res.json())
+    apiFetch<any[]>('/api/audit-logs')
       .then(data => {
         setLogs(data);
+        setError(null);
         setLoading(false);
       })
       .catch(err => {
         console.error(err);
+        setError(err.message || 'Unable to load audit logs');
         setLoading(false);
       });
   }, []);
@@ -26,6 +29,12 @@ export default function AuditLog() {
           View all system access and modification records. Restrict to System Administrators.
         </p>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50 flex justify-between items-center">
