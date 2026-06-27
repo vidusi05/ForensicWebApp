@@ -32,20 +32,25 @@ Ensure that the following software is installed:
 
 Clone the repository and install the required dependencies:
 
-bash npm install 
+```bash
+git clone https://github.com/vidusi05/ForensicWebApp.git
+cd ForensicWebApp
+npm run install:all
+```
 
 ## Running the Application
 
-Start the development server using:
+Start the frontend development server:
 
-bash npm run dev 
+```bash
+npm run dev
+```
 
-For local development with the API, run the backend in a second terminal:
+Run the backend API in a second terminal:
 
 ```bash
 cd backend
 cp .env.example .env
-npm install
 npm run dev
 ```
 
@@ -78,10 +83,8 @@ sudo npm install -g pm2
 ```bash
 git clone https://github.com/vidusi05/ForensicWebApp.git
 cd ForensicWebApp
-npm install
-cd backend
-npm install
-cp .env.example .env
+npm run install:all
+cp backend/.env.example backend/.env
 ```
 
 3. Edit `backend/.env`:
@@ -116,6 +119,7 @@ If this fails, check that the RDS security group allows inbound MySQL `3306` fro
 ```bash
 cd ~/ForensicWebApp
 npm run build
+cd backend
 pm2 start npm --name forensic-webapp -- start
 pm2 save
 pm2 startup
@@ -145,8 +149,8 @@ From your local development machine:
 
 ```bash
 git status
-git add README.md package.json package-lock.json backend src scripts
-git commit -m "Improve forensic app deployment and auth integration"
+git add README.md package.json backend frontend scripts .npmrc
+git commit -m "Organize frontend and backend project structure"
 git push origin main
 ```
 
@@ -158,10 +162,7 @@ On the EC2 server:
 cd ~/ForensicWebApp
 git status
 git pull origin main
-npm install
-cd backend
-npm install
-cd ..
+npm run install:all
 npm run build
 pm2 restart forensic-webapp
 pm2 logs forensic-webapp --lines 80
@@ -175,7 +176,37 @@ http://YOUR_EC2_PUBLIC_IP:5000
 
 ## Repository Structure
 
-ForensicWebApp/ ├── backend/ ├── frontend/ ├── package.json ├── README.md └── ...
+```text
+ForensicWebApp/
+├── backend/
+│   ├── .env.example
+│   ├── db.js
+│   ├── package.json
+│   ├── server.js
+│   └── uploads/
+├── frontend/
+│   ├── index.html
+│   ├── package.json
+│   ├── postcss.config.js
+│   ├── tailwind.config.js
+│   ├── tsconfig.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── components/
+│       ├── contexts/
+│       ├── data/
+│       ├── lib/
+│       ├── pages/
+│       ├── App.tsx
+│       ├── index.css
+│       └── main.tsx
+├── scripts/
+│   └── smoke-test.mjs
+├── .gitignore
+├── .npmrc
+├── package.json
+└── README.md
+```
 
 ## Acknowledgement
 

@@ -16,7 +16,7 @@ const port = process.env.PORT || 5000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadDir = path.join(__dirname, 'uploads');
-const frontendDistDir = path.join(__dirname, '..', 'dist');
+const frontendDistDir = path.join(__dirname, '..', 'frontend', 'dist');
 const jwtSecret = process.env.JWT_SECRET || 'change-this-secret-before-production';
 
 app.use(cors({
