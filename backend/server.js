@@ -106,9 +106,9 @@ app.get('/api/health', (req, res) => {
 
 // 1. Authentication Login
 app.post('/api/auth/login', async (req, res) => {
-  const { email, role, password } = req.body;
-  if (!email || !role || !password) {
-    return res.status(400).json({ error: 'Email, role, and password are required' });
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
   }
 
   try {
@@ -118,10 +118,6 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const user = results[0];
-    if (user.role !== role) {
-      return res.status(401).json({ error: 'Role mismatch' });
-    }
-
     const hasHashedPassword = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
     const passwordMatches = hasHashedPassword
       ? await bcrypt.compare(password, user.password)
@@ -131,7 +127,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Incorrect password' });
     }
 
-    await logAudit('User Login', user.name, `Successful login via role: ${role}`);
+    await logAudit('User Login', user.name, `Successful login via role: ${user.role}`);
 
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },

@@ -135,7 +135,6 @@ For normal HTTP on port 80 without typing `:5000`, add an inbound EC2 security g
 cd ~/ForensicWebApp
 BASE_URL=http://127.0.0.1:5000 \
 SMOKE_EMAIL=admin@hospital.gov \
-SMOKE_ROLE='System Administrator' \
 SMOKE_PASSWORD='the_password_from_SEED_USER_PASSWORD' \
 npm run smoke
 ```

@@ -1,6 +1,5 @@
 const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
 const email = process.env.SMOKE_EMAIL || 'admin@hospital.gov';
-const role = process.env.SMOKE_ROLE || 'System Administrator';
 const password = process.env.SMOKE_PASSWORD || process.env.SEED_USER_PASSWORD || 'password123';
 
 async function request(path, options = {}) {
@@ -22,9 +21,9 @@ console.log('health:', health.ok ? 'ok' : 'failed');
 const user = await request('/api/auth/login', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ email, role, password }),
+  body: JSON.stringify({ email, password }),
 });
-console.log('login:', user.email);
+console.log('login:', user.email, `(${user.role})`);
 
 const authHeaders = {
   Authorization: `Bearer ${user.token}`,
