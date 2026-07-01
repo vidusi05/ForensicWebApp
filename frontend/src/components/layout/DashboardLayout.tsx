@@ -75,24 +75,13 @@ export default function DashboardLayout() {
     <div className="flex min-h-screen bg-slate-50 font-sans">
       {/* Sidebar */}
       <div className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-white border-r border-slate-200 flex-col hidden lg:flex fixed inset-y-0 left-0 z-30 transition-all duration-200`}>
-        <div className={`${sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-6'} h-16 flex items-center border-b border-slate-200`}>
+        <div className={`${sidebarCollapsed ? 'justify-center px-3' : 'px-6'} h-16 flex items-center border-b border-slate-200`}>
           <div className="flex items-center gap-2 text-primary-600">
             <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center font-bold text-lg">
               F
             </div>
             {!sidebarCollapsed && <span className="font-bold text-xl tracking-tight text-slate-800">FourCells</span>}
           </div>
-          {!sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(true)}
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-              aria-label="Collapse navigation"
-              title="Collapse navigation"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          )}
         </div>
         
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
