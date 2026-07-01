@@ -1,6 +1,6 @@
 const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
 const email = process.env.SMOKE_EMAIL || 'admin@hospital.gov';
-const password = process.env.SMOKE_PASSWORD || process.env.SEED_USER_PASSWORD || 'password123';
+const password = process.env.SMOKE_PASSWORD || process.env.SEED_USER_PASSWORD || 'ChangeMe123!';
 
 async function request(path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, options);

@@ -54,17 +54,13 @@ cp .env.example .env
 npm run dev
 ```
 
-The default seed login users are:
+On a clean database, the system creates one bootstrap System Administrator account only:
 
 | Role | Email |
 | --- | --- |
-| Consultant JMO | perera@hospital.gov |
-| Medical Officer | silva@hospital.gov |
-| Data Entry Operator | operator@hospital.gov |
 | System Administrator | admin@hospital.gov |
-| Forensic Support Staff | staff@hospital.gov |
 
-All seeded users use the password from `SEED_USER_PASSWORD`; if it is not set before first startup, the fallback is `password123`.
+The bootstrap account uses the password from `SEED_USER_PASSWORD`; if it is not set before first startup, the fallback is `ChangeMe123!`. The account is marked for password change after first login. Create all other users from the System Administrator user-management screen.
 
 ## EC2 + RDS MySQL Deployment
 
@@ -95,11 +91,24 @@ NODE_ENV=production
 CLIENT_ORIGIN=http://YOUR_EC2_PUBLIC_IP
 JWT_SECRET=replace_with_a_long_random_secret
 SEED_USER_PASSWORD=replace_with_the_login_password_you_want
+SEED_ADMIN_EMAIL=admin@hospital.gov
+SEED_ADMIN_NAME=System Administrator
+CLEAN_DEMO_DATA_ON_START=false
 DB_HOST=forensic-db.xxxxxx.ap-southeast-1.rds.amazonaws.com
 DB_PORT=3306
 DB_USER=admin
 DB_PASSWORD=your_rds_master_password
 DB_NAME=forensic_db
+MAIL_PROVIDER=ses
+MAIL_FROM=teamfourcells@gmail.com
+MAIL_FROM_NAME=Forensic Medicine Department
+SES_IDENTITY_ARN=arn:aws:ses:ap-southeast-1:043671580226:identity/teamfourcells@gmail.com
+SMTP_HOST=email-smtp.ap-southeast-1.amazonaws.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your_ses_smtp_username
+SMTP_PASS=your_ses_smtp_password
+TEMP_PASSWORD_EXPIRES_MINUTES=30
 ```
 
 4. Confirm RDS connectivity from EC2:

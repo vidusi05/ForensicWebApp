@@ -4,10 +4,12 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { initDb, getPool } from './db.js';
+import { isEmailConfigured, sendTempPasswordEmail } from './mailer.js';
 
 dotenv.config();
 
@@ -44,6 +46,15 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage });
+const userRoles = [
+  'Consultant JMO',
+  'Medical Officer',
+  'Forensic Support Staff',
+  'Data Entry Operator',
+  'Hospital Administration',
+  'System Administrator',
+];
+
 const rolePermissions = {
   'Consultant JMO': ['read', 'write', 'reports', 'evidence'],
   'Medical Officer': ['read', 'write', 'reports', 'evidence'],
@@ -52,6 +63,8 @@ const rolePermissions = {
   'Hospital Administration': ['read', 'reports'],
   'System Administrator': ['read', 'write', 'reports', 'evidence', 'admin'],
 };
+
+const activeUserStatuses = ['Active'];
 
 // Initialize Database
 await initDb().catch((err) => {
@@ -75,6 +88,50 @@ function formatDate(dateVal) {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function formatDateTime(dateVal) {
+  if (!dateVal) return null;
+  const d = new Date(dateVal);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function createId(prefix) {
+  return `${prefix}_${crypto.randomBytes(8).toString('hex')}`;
+}
+
+function generateTemporaryPassword() {
+  return crypto.randomBytes(12).toString('base64url');
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function sanitizeUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    email: user.email,
+    status: user.status || 'Active',
+    mustChangePassword: Boolean(user.must_change_password),
+    personId: user.person_id || null,
+    createdAt: formatDateTime(user.created_at),
+    updatedAt: formatDateTime(user.updated_at),
+    deactivatedAt: formatDateTime(user.deactivated_at),
+    passwordUpdatedAt: formatDateTime(user.password_updated_at),
+    lastPasswordResetAt: formatDateTime(user.last_password_reset_at),
+    temporaryPasswordExpiresAt: formatDateTime(user.temporary_password_expires_at),
+  };
+}
+
+function validateUserPayload({ name, email, role }) {
+  if (!name || !String(name).trim()) return 'Full name is required';
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) return 'A valid email address is required';
+  if (!userRoles.includes(role)) return 'A valid role is required';
+  return null;
 }
 
 // Helper to log audit trails
@@ -118,6 +175,10 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const user = results[0];
+    if (!activeUserStatuses.includes(user.status || 'Active')) {
+      return res.status(403).json({ error: 'This user account is deactivated. Contact the System Administrator.' });
+    }
+
     const hasHashedPassword = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
     const passwordMatches = hasHashedPassword
       ? await bcrypt.compare(password, user.password)
@@ -125,6 +186,10 @@ app.post('/api/auth/login', async (req, res) => {
 
     if (!passwordMatches) {
       return res.status(401).json({ error: 'Incorrect password' });
+    }
+
+    if (user.temporary_password_expires_at && new Date(user.temporary_password_expires_at) < new Date()) {
+      return res.status(401).json({ error: 'Temporary password has expired. Please request a new password reset.' });
     }
 
     await logAudit('User Login', user.name, `Successful login via role: ${user.role}`);
@@ -140,6 +205,7 @@ app.post('/api/auth/login', async (req, res) => {
       name: user.name,
       role: user.role,
       email: user.email,
+      mustChangePassword: Boolean(user.must_change_password),
       token
     });
   } catch (error) {
@@ -168,6 +234,15 @@ function requirePermission(permission) {
   return (req, res, next) => {
     const permissions = rolePermissions[req.user?.role] || [];
     if (!permissions.includes(permission)) {
+      return res.status(403).json({ error: 'You do not have permission to perform this action' });
+    }
+    next();
+  };
+}
+
+function requireRole(role) {
+  return (req, res, next) => {
+    if (req.user?.role !== role) {
       return res.status(403).json({ error: 'You do not have permission to perform this action' });
     }
     next();
@@ -595,6 +670,315 @@ app.get('/api/audit-logs', requirePermission('admin'), async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch audit logs' });
+  }
+});
+
+app.get('/api/admin/roles', requireRole('System Administrator'), (req, res) => {
+  res.json(userRoles);
+});
+
+app.get('/api/admin/email-status', requireRole('System Administrator'), (req, res) => {
+  res.json({
+    configured: isEmailConfigured(),
+    from: process.env.MAIL_FROM || null,
+    host: process.env.SMTP_HOST || null,
+    port: process.env.SMTP_PORT || null,
+  });
+});
+
+app.get('/api/admin/users', requireRole('System Administrator'), async (req, res) => {
+  const { status, search } = req.query;
+  try {
+    let sql = `
+      SELECT id, name, role, email, status, must_change_password, person_id,
+        created_at, updated_at, deactivated_at, password_updated_at,
+        last_password_reset_at, temporary_password_expires_at
+      FROM users
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (status && status !== 'All') {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+
+    if (search) {
+      sql += ' AND (name LIKE ? OR email LIKE ? OR role LIKE ?)';
+      const like = `%${search}%`;
+      params.push(like, like, like);
+    }
+
+    sql += ' ORDER BY FIELD(status, "Active", "Deactivated"), name ASC';
+    const users = await query(sql, params);
+    res.json(users.map(sanitizeUser));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch users' });
+  }
+});
+
+app.post('/api/admin/users', requireRole('System Administrator'), async (req, res) => {
+  const { name, role } = req.body;
+  const email = normalizeEmail(req.body.email);
+  const validationError = validateUserPayload({ name, email, role });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  if (!isEmailConfigured()) {
+    return res.status(503).json({ error: 'Email service is not configured. Add SMTP settings before creating users.' });
+  }
+
+  const pool = getPool();
+  const connection = await pool.getConnection();
+  const tempPassword = generateTemporaryPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
+  const userId = createId('user');
+  const expiryMinutes = Number(process.env.TEMP_PASSWORD_EXPIRES_MINUTES || 30);
+
+  try {
+    await connection.beginTransaction();
+
+    const [existing] = await connection.query('SELECT id FROM users WHERE email = ?', [email]);
+    if (existing.length > 0) {
+      await connection.rollback();
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+
+    await connection.query(
+      `INSERT INTO users
+        (id, name, role, email, password, status, must_change_password,
+         last_password_reset_at, temporary_password_expires_at, password_updated_at)
+       VALUES (?, ?, ?, ?, ?, 'Active', TRUE, NOW(), DATE_ADD(NOW(), INTERVAL ? MINUTE), NOW())`,
+      [userId, String(name).trim(), role, email, passwordHash, expiryMinutes]
+    );
+
+    await sendTempPasswordEmail({
+      to: email,
+      name: String(name).trim(),
+      tempPassword,
+      requestedBy: req.user.email,
+    });
+
+    await connection.commit();
+    await logAudit('User Created', req.user.email, `Created ${role} account for ${email} and emailed a temporary password`);
+
+    const [created] = await query(
+      `SELECT id, name, role, email, status, must_change_password, person_id,
+        created_at, updated_at, deactivated_at, password_updated_at,
+        last_password_reset_at, temporary_password_expires_at
+       FROM users WHERE id = ?`,
+      [userId]
+    );
+    res.status(201).json(sanitizeUser(created));
+  } catch (error) {
+    await connection.rollback();
+    console.error(error);
+    res.status(500).json({ error: error.message || 'Failed to create user' });
+  } finally {
+    connection.release();
+  }
+});
+
+app.put('/api/admin/users/:id', requireRole('System Administrator'), async (req, res) => {
+  const { id } = req.params;
+  const { name, role } = req.body;
+  const email = normalizeEmail(req.body.email);
+  const validationError = validateUserPayload({ name, email, role });
+  if (validationError) {
+    return res.status(400).json({ error: validationError });
+  }
+
+  try {
+    const existing = await query('SELECT id FROM users WHERE email = ? AND id <> ?', [email, id]);
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'A different user already uses this email' });
+    }
+
+    const result = await query(
+      'UPDATE users SET name = ?, role = ?, email = ? WHERE id = ?',
+      [String(name).trim(), role, email, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await logAudit('User Modified', req.user.email, `Updated user ${email} (${role})`);
+
+    const [updated] = await query(
+      `SELECT id, name, role, email, status, must_change_password, person_id,
+        created_at, updated_at, deactivated_at, password_updated_at,
+        last_password_reset_at, temporary_password_expires_at
+       FROM users WHERE id = ?`,
+      [id]
+    );
+    res.json(sanitizeUser(updated));
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+app.post('/api/admin/users/:id/reset-password', requireRole('System Administrator'), async (req, res) => {
+  const { id } = req.params;
+  if (!isEmailConfigured()) {
+    return res.status(503).json({ error: 'Email service is not configured. Add SMTP settings before resetting passwords.' });
+  }
+
+  const pool = getPool();
+  const connection = await pool.getConnection();
+  const tempPassword = generateTemporaryPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
+  const expiryMinutes = Number(process.env.TEMP_PASSWORD_EXPIRES_MINUTES || 30);
+
+  try {
+    await connection.beginTransaction();
+
+    const [users] = await connection.query('SELECT id, name, email, status FROM users WHERE id = ?', [id]);
+    if (users.length === 0) {
+      await connection.rollback();
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = users[0];
+    if (user.status !== 'Active') {
+      await connection.rollback();
+      return res.status(409).json({ error: 'Only active users can receive password resets' });
+    }
+
+    await connection.query(
+      `UPDATE users
+       SET password = ?, must_change_password = TRUE, last_password_reset_at = NOW(),
+           temporary_password_expires_at = DATE_ADD(NOW(), INTERVAL ? MINUTE),
+           password_updated_at = NOW()
+       WHERE id = ?`,
+      [passwordHash, expiryMinutes, id]
+    );
+
+    await sendTempPasswordEmail({
+      to: user.email,
+      name: user.name,
+      tempPassword,
+      requestedBy: req.user.email,
+    });
+
+    await connection.commit();
+    await logAudit('Password Reset', req.user.email, `Reset password for ${user.email} and sent temporary password`);
+    res.json({ ok: true, message: 'Temporary password sent to the user email address' });
+  } catch (error) {
+    await connection.rollback();
+    console.error(error);
+    res.status(500).json({ error: error.message || 'Failed to reset password' });
+  } finally {
+    connection.release();
+  }
+});
+
+app.post('/api/admin/users/:id/deactivate', requireRole('System Administrator'), async (req, res) => {
+  const { id } = req.params;
+  if (id === req.user.id) {
+    return res.status(409).json({ error: 'You cannot deactivate your own account' });
+  }
+
+  try {
+    const result = await query(
+      "UPDATE users SET status = 'Deactivated', deactivated_at = NOW() WHERE id = ? AND status = 'Active'",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Active user not found' });
+    }
+
+    await logAudit('User Deactivated', req.user.email, `Deactivated user ${id}`);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to deactivate user' });
+  }
+});
+
+app.post('/api/admin/users/:id/reactivate', requireRole('System Administrator'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await query(
+      "UPDATE users SET status = 'Active', deactivated_at = NULL WHERE id = ? AND status = 'Deactivated'",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Deactivated user not found' });
+    }
+
+    await logAudit('User Reactivated', req.user.email, `Reactivated user ${id}`);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to reactivate user' });
+  }
+});
+
+app.delete('/api/admin/users/:id', requireRole('System Administrator'), async (req, res) => {
+  const { id } = req.params;
+  if (id === req.user.id) {
+    return res.status(409).json({ error: 'You cannot delete your own account' });
+  }
+
+  try {
+    const users = await query('SELECT email, status FROM users WHERE id = ?', [id]);
+    if (users.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (users[0].status !== 'Deactivated') {
+      return res.status(409).json({ error: 'Only deactivated users can be permanently deleted' });
+    }
+
+    await query('DELETE FROM users WHERE id = ?', [id]);
+    await logAudit('User Deleted', req.user.email, `Permanently deleted deactivated user ${users[0].email}`);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+app.post('/api/auth/change-password', async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current password and new password are required' });
+  }
+  if (String(newPassword).length < 10) {
+    return res.status(400).json({ error: 'New password must contain at least 10 characters' });
+  }
+
+  try {
+    const results = await query('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = results[0];
+    const passwordMatches = await bcrypt.compare(currentPassword, user.password);
+    if (!passwordMatches) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    await query(
+      `UPDATE users
+       SET password = ?, must_change_password = FALSE, temporary_password_expires_at = NULL,
+           password_updated_at = NOW()
+       WHERE id = ?`,
+      [newHash, req.user.id]
+    );
+
+    await logAudit('Password Changed', user.email, 'User changed password successfully');
+    res.json({ ok: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to change password' });
   }
 });
 

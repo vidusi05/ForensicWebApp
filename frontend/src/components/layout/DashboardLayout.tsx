@@ -11,6 +11,7 @@ import {
   UserCircle,
   LogOut,
   ShieldAlert,
+  UsersRound,
   Menu,
   X
 } from 'lucide-react';
@@ -35,7 +36,11 @@ export default function DashboardLayout() {
   };
 
   const navItems = user?.role === 'System Administrator'
-    ? [...navigation, { name: 'Audit Logs', href: '/audit', icon: ShieldAlert }]
+    ? [
+        ...navigation,
+        { name: 'User Administration', href: '/admin/users', icon: UsersRound },
+        { name: 'Audit Logs', href: '/audit', icon: ShieldAlert },
+      ]
     : navigation;
 
   const renderNavLink = (item: typeof navItems[number]) => {
@@ -164,8 +169,8 @@ export default function DashboardLayout() {
         </main>
 
         <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur lg:hidden">
-          <div className="grid grid-cols-4">
-            {navigation.map((item) => {
+          <div className={`grid ${navItems.length > 4 ? 'grid-cols-5' : 'grid-cols-4'}`}>
+            {navItems.slice(0, 5).map((item) => {
               const isActive = location.pathname.startsWith(item.href);
               return (
                 <Link

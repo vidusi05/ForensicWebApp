@@ -267,9 +267,26 @@ async function createTables() {
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
       person_id VARCHAR(50),
+      status VARCHAR(30) NOT NULL DEFAULT 'Active',
+      must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
+      password_updated_at DATETIME,
+      last_password_reset_at DATETIME,
+      temporary_password_expires_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      deactivated_at DATETIME,
       FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE SET NULL
     )
   `);
+
+  await ensureColumn(p, 'users', 'status', "VARCHAR(30) NOT NULL DEFAULT 'Active'");
+  await ensureColumn(p, 'users', 'must_change_password', 'BOOLEAN NOT NULL DEFAULT FALSE');
+  await ensureColumn(p, 'users', 'password_updated_at', 'DATETIME');
+  await ensureColumn(p, 'users', 'last_password_reset_at', 'DATETIME');
+  await ensureColumn(p, 'users', 'temporary_password_expires_at', 'DATETIME');
+  await ensureColumn(p, 'users', 'created_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP');
+  await ensureColumn(p, 'users', 'updated_at', 'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  await ensureColumn(p, 'users', 'deactivated_at', 'DATETIME');
 
   await p.query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -315,124 +332,54 @@ async function ensureColumn(pool, tableName, columnName, definition) {
 async function seedData() {
   const p = getPool();
 
-  // 1. Seed Main Tables (checking users)
+  if (process.env.CLEAN_DEMO_DATA_ON_START === 'true') {
+    await removeKnownDemoData(p);
+  }
+
   const [rows] = await p.query('SELECT COUNT(*) as count FROM users');
   if (rows[0].count === 0) {
-    console.log('Database empty. Seeding initial data...');
+    console.log('No users found. Creating bootstrap System Administrator only...');
 
-    const persons = [
-      ['p_doc1', 'Dr. A. Perera', 'Male', '1980-05-12', '198012345V', '0771234567', 46],
-      ['p_doc2', 'Dr. B. Silva', 'Male', '1982-08-20', '198223456V', '0772345678', 44],
-      ['p_doc3', 'Dr. C. Fernando', 'Male', '1978-02-15', '197834567V', '0773456789', 48],
-      ['p_op1', 'Data Entry Operator', 'Female', '1995-10-10', '199545678V', '0774567890', 31],
-      ['p_admin1', 'System Administrator', 'Male', '1990-01-01', '199056789V', '0775678901', 36],
-      ['p_staff1', 'Forensic Support Staff', 'Female', '1993-04-05', '199367890V', '0776789012', 33],
-      ['p_admin2', 'Hospital Administrator', 'Female', '1989-03-11', '198934567V', '0771112233', 37],
-      ['p_pat1', 'John Doe', 'Male', '1990-01-15', '199011122V', '0779998887', 36],
-      ['p_pat2', 'Michael Brown', 'Male', '1988-07-22', '198822334V', '0778887776', 37]
-    ];
-    for (const person of persons) {
-      await p.query(
-        'INSERT INTO person (person_id, name_with_initials, gender, dob, nic, contact_no, age) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        person
-      );
-    }
-
-    await p.query('INSERT INTO jmo (person_id, jmo_id, role) VALUES (?, ?, ?)', ['p_doc1', 'jmo1', 'Consultant JMO']);
-    await p.query('INSERT INTO jmo (person_id, jmo_id, role) VALUES (?, ?, ?)', ['p_doc3', 'jmo2', 'Consultant JMO']);
-    await p.query('INSERT INTO mo (person_id, mo_id, department) VALUES (?, ?, ?)', ['p_doc2', 'mo1', 'Forensic Medicine']);
-    await p.query('INSERT INTO patient (person_id) VALUES (?)', ['p_pat1']);
-    await p.query('INSERT INTO patient (person_id) VALUES (?)', ['p_pat2']);
-
-    await p.query('INSERT INTO decedent (decedent_id, name_with_initials, gender, dob) VALUES (?, ?, ?, ?)', ['dec1', 'Jane Smith', 'Female', '1992-11-03']);
-    await p.query('INSERT INTO decedent (decedent_id, name_with_initials, gender, dob) VALUES (?, ?, ?, ?)', ['dec2', 'Unknown', 'Unknown', null]);
-
-    const policeOfficers = [
-      ['p_pol1', 'pol1', 'Sergeant', 'Kandy Police Station'],
-      ['p_pol2', 'pol2', 'Sub-Inspector', 'Peradeniya Police Station']
-    ];
-    for (const officer of policeOfficers) {
-      await p.query('INSERT INTO person (person_id, name_with_initials, gender) VALUES (?, ?, ?)', [officer[0], officer[2] + ' ' + officer[3].split(' ')[0], 'Male']);
-      await p.query('INSERT INTO police (person_id, police_id, role, station) VALUES (?, ?, ?, ?)', officer);
-    }
-
-    const cases = [
-      ['2026101', 'Clinical Forensic', 'Active', '2026-06-01', 'p_pat1', null, 'p_doc1', 'p_pol1'],
-      ['2026102', 'Autopsy', 'Pending PMR', '2026-06-02', null, 'dec1', 'p_doc2', 'p_pol2'],
-      ['2026103', 'Clinical Forensic', 'Closed', '2026-06-02', 'p_pat2', null, 'p_doc1', 'p_pol1'],
-      ['2026104', 'Autopsy', 'Active', '2026-06-03', null, 'dec2', 'p_doc3', 'p_pol2']
-    ];
-    for (const c of cases) {
-      await p.query(
-        'INSERT INTO investigation_cases (case_id, type, status, date_registered, patient_id, decedent_id, doctor_id, police_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        c
-      );
-    }
-
-    await p.query('INSERT INTO clinical_record (clinical_id, case_id, doc_type) VALUES (?, ?, ?)', ['cl1', '2026101', 'MLEF']);
-    await p.query('INSERT INTO clinical_record (clinical_id, case_id, doc_type) VALUES (?, ?, ?)', ['cl2', '2026103', 'MLEF']);
-    await p.query('INSERT INTO mlef (mlef_id, clinical_id, date_of_issue, scanned_copy, is_issued_to_police) VALUES (?, ?, ?, ?, ?)', ['m1', 'cl1', '2026-06-01', 'mlef_2026101.pdf', true]);
-    await p.query('INSERT INTO mlef (mlef_id, clinical_id, date_of_issue, scanned_copy, is_issued_to_police) VALUES (?, ?, ?, ?, ?)', ['m2', 'cl2', '2026-06-02', 'mlef_2026103.pdf', true]);
+    const adminPassword = process.env.SEED_USER_PASSWORD || 'ChangeMe123!';
+    const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@hospital.gov';
+    const adminName = process.env.SEED_ADMIN_NAME || 'System Administrator';
+    const defaultPasswordHash = await bcrypt.hash(adminPassword, 12);
 
     await p.query(
-      'INSERT INTO pmr (pmr_id, case_id, date_and_time_of_performance, place_of_death, cause_of_death, date_and_time_of_death) VALUES (?, ?, ?, ?, ?, ?)',
-      ['pm1', '2026102', '2026-06-02 09:00:00', 'Hospital Morgue', 'Multiple Traumatic Injuries', '2026-06-02 02:30:00']
+      `INSERT INTO users
+        (id, name, role, email, password, person_id, status, must_change_password, password_updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'Active', ?, NOW())`,
+      ['u_admin', adminName, 'System Administrator', adminEmail, defaultPasswordHash, null, true]
     );
 
-    const mediaItems = [
-      ['ev1', '2026101', 'image', 'Crime_Scene_1.jpg', '2.4 MB', '2026-06-01 10:00 AM', 'u1', 'image/jpeg', 'Crime_Scene_1.jpg'],
-      ['ev2', '2026101', 'document', 'MLEF_Draft.pdf', '1.2 MB', '2026-06-01 11:30 AM', 'u1', 'application/pdf', 'MLEF_Draft.pdf'],
-      ['ev3', '2026102', 'document', 'Toxicology_Report.pdf', '840 KB', '2026-06-02 02:00 PM', 'u2', 'application/pdf', 'Toxicology_Report.pdf']
-    ];
-    for (const m of mediaItems) {
-      await p.query(
-        'INSERT INTO media (media_id, case_id, doc_type, scanned_copy, media_type, uploaded_at, uploaded_by, mime_type, original_filename) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        m
-      );
-    }
-
-    await p.query('INSERT INTO reports_meta (id, case_id, type, status, date) VALUES (?, ?, ?, ?, ?)', ['rep1', '2026101', 'MLEF', 'Drafted', '2026-06-01']);
-    await p.query('INSERT INTO reports_meta (id, case_id, type, status, date) VALUES (?, ?, ?, ?, ?)', ['rep2', '2026102', 'PMR', 'Pending Signature', '2026-06-02']);
-
-    const logs = [
-      ['log1', 'User Login', 'Dr. A. Perera', '2026-06-03 08:00 AM', 'Successful login via IP 192.168.1.1'],
-      ['log2', 'Case Created', 'Data Entry Operator', '2026-06-03 08:15 AM', 'Created case #2026104'],
-      ['log3', 'Evidence Uploaded', 'Dr. C. Fernando', '2026-06-03 08:45 AM', 'Uploaded 3 photos to case #2026104']
-    ];
-    for (const log of logs) {
-      await p.query('INSERT INTO audit_logs (id, action, user_name, timestamp, details) VALUES (?, ?, ?, ?, ?)', log);
-    }
-
-    const defaultPasswordHash = await bcrypt.hash(process.env.SEED_USER_PASSWORD || 'password123', 12);
-    const users = [
-      ['u1', 'Dr. A. Perera', 'Consultant JMO', 'perera@hospital.gov', defaultPasswordHash, 'p_doc1'],
-      ['u2', 'Dr. B. Silva', 'Medical Officer', 'silva@hospital.gov', defaultPasswordHash, 'p_doc2'],
-      ['u3', 'Dr. C. Fernando', 'Consultant JMO', 'fernando@hospital.gov', defaultPasswordHash, 'p_doc3'],
-      ['u4', 'Data Entry Operator', 'Data Entry Operator', 'operator@hospital.gov', defaultPasswordHash, 'p_op1'],
-      ['u5', 'System Administrator', 'System Administrator', 'admin@hospital.gov', defaultPasswordHash, 'p_admin1'],
-      ['u6', 'Forensic Support Staff', 'Forensic Support Staff', 'staff@hospital.gov', defaultPasswordHash, 'p_staff1'],
-      ['u7', 'Hospital Administrator', 'Hospital Administration', 'hospital-admin@hospital.gov', defaultPasswordHash, 'p_admin2']
-    ];
-    for (const user of users) {
-      await p.query(
-        'INSERT INTO users (id, name, role, email, password, person_id) VALUES (?, ?, ?, ?, ?, ?)',
-        user
-      );
-    }
-
-    console.log('Seeding main tables completed.');
+    console.log(`Bootstrap System Administrator created: ${adminEmail}`);
   }
+}
 
-  // 2. Seed Summons independently to ensure they exist even if users table is already seeded
-  const [sumRows] = await p.query('SELECT COUNT(*) as count FROM summon');
-  if (sumRows[0].count === 0) {
-    console.log('Seeding summons...');
-    await p.query('INSERT INTO summon (summon_id, case_id, who_issued, court_date, date_of_issue) VALUES (?, ?, ?, ?, ?)', [
-      'sum1', '2026101', 'High Court Kandy', '2026-06-25', '2026-06-01'
-    ]);
-    await p.query('INSERT INTO summon (summon_id, case_id, who_issued, court_date, date_of_issue) VALUES (?, ?, ?, ?, ?)', [
-      'sum2', '2026102', 'Magistrate Court Peradeniya', '2026-06-30', '2026-06-02'
-    ]);
-    console.log('Seeding summons completed.');
-  }
+async function removeKnownDemoData(pool) {
+  console.log('Cleaning known demo data IDs...');
+
+  await pool.query("DELETE FROM audit_logs WHERE id IN ('log1', 'log2', 'log3')");
+  await pool.query("DELETE FROM reports_meta WHERE id IN ('rep1', 'rep2')");
+  await pool.query("DELETE FROM media WHERE media_id IN ('ev1', 'ev2', 'ev3')");
+  await pool.query("DELETE FROM summon WHERE summon_id IN ('sum1', 'sum2')");
+  await pool.query("DELETE FROM pmr WHERE pmr_id IN ('pm1')");
+  await pool.query("DELETE FROM mlef WHERE mlef_id IN ('m1', 'm2')");
+  await pool.query("DELETE FROM clinical_record WHERE clinical_id IN ('cl1', 'cl2')");
+  await pool.query("DELETE FROM investigation_cases WHERE case_id IN ('2026101', '2026102', '2026103', '2026104')");
+  await pool.query("DELETE FROM decedent WHERE decedent_id IN ('dec1', 'dec2')");
+  await pool.query("DELETE FROM patient WHERE person_id IN ('p_pat1', 'p_pat2')");
+  await pool.query("DELETE FROM jmo WHERE person_id IN ('p_doc1', 'p_doc3')");
+  await pool.query("DELETE FROM mo WHERE person_id IN ('p_doc2')");
+  await pool.query("DELETE FROM police WHERE person_id IN ('p_pol1', 'p_pol2')");
+  await pool.query("DELETE FROM users WHERE id IN ('u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7')");
+  await pool.query(`
+    DELETE FROM person
+    WHERE person_id IN (
+      'p_doc1', 'p_doc2', 'p_doc3', 'p_op1', 'p_admin1', 'p_staff1', 'p_admin2',
+      'p_pat1', 'p_pat2', 'p_pol1', 'p_pol2'
+    )
+  `);
+
+  console.log('Known demo data cleanup completed.');
 }

@@ -7,6 +7,7 @@ export interface User {
   name: string;
   role: UserRole;
   email: string;
+  mustChangePassword: boolean;
   token: string;
 }
 
@@ -14,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -53,6 +55,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('forensic_user', JSON.stringify(dbUser));
   };
 
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    if (!user) throw new Error('Authentication required');
+
+    const response = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${user.token}`,
+      },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Password change failed');
+    }
+
+    const updatedUser = { ...user, mustChangePassword: false };
+    setUser(updatedUser);
+    localStorage.setItem('forensic_user', JSON.stringify(updatedUser));
+  };
 
   const logout = () => {
     setUser(null);
@@ -60,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, changePassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

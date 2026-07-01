@@ -258,7 +258,7 @@ export default function CaseManagement() {
                 <input 
                   type="text" 
                   required
-                  placeholder="e.g. John Doe"
+                  placeholder="Enter subject name"
                   className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   value={patientName}
                   onChange={(e) => setPatientName(e.target.value)}
