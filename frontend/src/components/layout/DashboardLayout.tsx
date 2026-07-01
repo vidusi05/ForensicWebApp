@@ -89,17 +89,6 @@ export default function DashboardLayout() {
         </nav>
         
         <div className="p-4 border-t border-slate-200 space-y-1">
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed(false)}
-              className="mb-2 flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-              aria-label="Expand navigation"
-              title="Expand navigation"
-            >
-              <Menu className="h-5 w-5 text-slate-400" />
-            </button>
-          )}
           <Link
             to="/settings"
             title={sidebarCollapsed ? 'Settings' : undefined}
