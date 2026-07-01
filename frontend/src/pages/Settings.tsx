@@ -1,8 +1,44 @@
+import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Settings as SettingsIcon, Shield, User } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, LockKeyhole, Settings as SettingsIcon, Shield, User } from 'lucide-react';
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, changePassword } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  const handlePasswordChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPasswordMessage(null);
+    setPasswordError(null);
+
+    if (newPassword.length < 10) {
+      setPasswordError('New password must contain at least 10 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New password and confirmation do not match.');
+      return;
+    }
+
+    setSavingPassword(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordMessage('Password changed successfully.');
+    } catch (error) {
+      setPasswordError(error instanceof Error ? error.message : 'Unable to change password.');
+    } finally {
+      setSavingPassword(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -37,6 +73,72 @@ export default function Settings() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-200 bg-slate-50/50 flex items-center gap-2">
+          <LockKeyhole className="h-5 w-5 text-primary-600" />
+          <h3 className="text-base font-semibold leading-6 text-slate-900">Change Password</h3>
+        </div>
+        <form onSubmit={handlePasswordChange} className="p-6 space-y-5">
+          {passwordMessage && (
+            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
+              <CheckCircle2 className="h-4 w-4" />
+              {passwordMessage}
+            </div>
+          )}
+
+          {passwordError && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              <AlertTriangle className="h-4 w-4" />
+              {passwordError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Current Password</label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">New Password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700">Confirm New Password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              type="submit"
+              disabled={savingPassword}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              <LockKeyhole className="h-4 w-4" />
+              {savingPassword ? 'Updating...' : 'Update Password'}
+            </button>
+          </div>
+        </form>
       </div>
       
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

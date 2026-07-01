@@ -26,6 +26,7 @@ const navigation = [
 
 export default function DashboardLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -43,26 +44,29 @@ export default function DashboardLayout() {
       ]
     : navigation;
 
-  const renderNavLink = (item: typeof navItems[number]) => {
+  const renderNavLink = (item: typeof navItems[number], compact = sidebarCollapsed) => {
     const isActive = location.pathname.startsWith(item.href);
     return (
       <Link
         key={item.name}
         to={item.href}
         onClick={() => setMobileMenuOpen(false)}
-        className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-colors duration-150 ${
+        title={compact ? item.name : undefined}
+        className={`group flex items-center rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
+          compact ? 'justify-center' : ''
+        } ${
           isActive
             ? 'bg-primary-50 text-primary-700'
             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
         }`}
       >
         <item.icon
-          className={`mr-3 h-5 w-5 flex-shrink-0 ${
+          className={`${compact ? '' : 'mr-3'} h-5 w-5 flex-shrink-0 ${
             isActive ? 'text-primary-600' : 'text-slate-400 group-hover:text-slate-500'
           }`}
           aria-hidden="true"
         />
-        {item.name}
+        {!compact && item.name}
       </Link>
     );
   };
@@ -70,28 +74,58 @@ export default function DashboardLayout() {
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
       {/* Sidebar */}
-      <div className="w-64 bg-white border-r border-slate-200 flex-col hidden lg:flex fixed inset-y-0 left-0 z-30">
-        <div className="h-16 flex items-center px-6 border-b border-slate-200">
+      <div className={`${sidebarCollapsed ? 'w-20' : 'w-64'} bg-white border-r border-slate-200 flex-col hidden lg:flex fixed inset-y-0 left-0 z-30 transition-all duration-200`}>
+        <div className={`${sidebarCollapsed ? 'justify-center px-3' : 'justify-between px-6'} h-16 flex items-center border-b border-slate-200`}>
           <div className="flex items-center gap-2 text-primary-600">
             <div className="w-8 h-8 rounded-lg bg-primary-100 flex items-center justify-center font-bold text-lg">
               F
             </div>
-            <span className="font-bold text-xl tracking-tight text-slate-800">FourCells</span>
+            {!sidebarCollapsed && <span className="font-bold text-xl tracking-tight text-slate-800">FourCells</span>}
           </div>
+          {!sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(true)}
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              aria-label="Collapse navigation"
+              title="Collapse navigation"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          )}
         </div>
         
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {navItems.map(renderNavLink)}
+          {navItems.map((item) => renderNavLink(item))}
         </nav>
         
         <div className="p-4 border-t border-slate-200 space-y-1">
-          <Link to="/settings" className="flex items-center w-full px-3 py-2 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors">
-            <Settings className="mr-3 h-5 w-5 text-slate-400" />
-            Settings
+          {sidebarCollapsed && (
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              className="mb-2 flex w-full items-center justify-center rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+              aria-label="Expand navigation"
+              title="Expand navigation"
+            >
+              <Menu className="h-5 w-5 text-slate-400" />
+            </button>
+          )}
+          <Link
+            to="/settings"
+            title={sidebarCollapsed ? 'Settings' : undefined}
+            className={`flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 ${sidebarCollapsed ? 'justify-center' : ''}`}
+          >
+            <Settings className={`${sidebarCollapsed ? '' : 'mr-3'} h-5 w-5 text-slate-400`} />
+            {!sidebarCollapsed && 'Settings'}
           </Link>
-          <button onClick={handleLogout} className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors mt-2">
-            <LogOut className="mr-3 h-5 w-5 text-red-500" />
-            Logout
+          <button
+            onClick={handleLogout}
+            title={sidebarCollapsed ? 'Logout' : undefined}
+            className={`mt-2 flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 ${sidebarCollapsed ? 'justify-center' : ''}`}
+          >
+            <LogOut className={`${sidebarCollapsed ? '' : 'mr-3'} h-5 w-5 text-red-500`} />
+            {!sidebarCollapsed && 'Logout'}
           </button>
         </div>
       </div>
@@ -115,7 +149,7 @@ export default function DashboardLayout() {
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-              {navItems.map(renderNavLink)}
+              {navItems.map((item) => renderNavLink(item, false))}
             </nav>
             <div className="p-4 border-t border-slate-200">
               <button onClick={handleLogout} className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors">
@@ -128,11 +162,20 @@ export default function DashboardLayout() {
       )}
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
+      <div className={`${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'} flex-1 flex flex-col min-w-0 transition-all duration-200`}>
         {/* Header */}
         <header className="sticky top-0 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sm:px-6 z-20">
           <div className="flex-1 flex items-center gap-3 min-w-0">
             <button type="button" onClick={() => setMobileMenuOpen(true)} className="lg:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100">
+              <Menu className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((value) => !value)}
+              className="hidden rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:inline-flex"
+              aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+              title={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+            >
               <Menu className="h-5 w-5" />
             </button>
             <div className="max-w-md w-full relative hidden sm:block">
