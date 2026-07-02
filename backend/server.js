@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import { initDb, getPool } from './db.js';
 import { isEmailConfigured, sendTempPasswordEmail } from './mailer.js';
 
@@ -20,6 +21,8 @@ const __dirname = path.dirname(__filename);
 const uploadDir = path.join(__dirname, 'uploads');
 const frontendDistDir = path.join(__dirname, '..', 'frontend', 'dist');
 const jwtSecret = process.env.JWT_SECRET || 'change-this-secret-before-production';
+const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = googleClientId ? new OAuth2Client(googleClientId) : null;
 
 app.use(cors({
   origin: process.env.CLIENT_ORIGIN || true,
@@ -134,6 +137,23 @@ function validateUserPayload({ name, email, role }) {
   return null;
 }
 
+function createSessionPayload(user) {
+  const token = jwt.sign(
+    { id: user.id, email: user.email, role: user.role },
+    jwtSecret,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+  );
+
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    email: user.email,
+    mustChangePassword: Boolean(user.must_change_password),
+    token,
+  };
+}
+
 // Helper to log audit trails
 async function logAudit(action, username, details) {
   try {
@@ -194,23 +214,53 @@ app.post('/api/auth/login', async (req, res) => {
 
     await logAudit('User Login', user.name, `Successful login via role: ${user.role}`);
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      jwtSecret,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
-    );
-
-    res.json({
-      id: user.id,
-      name: user.name,
-      role: user.role,
-      email: user.email,
-      mustChangePassword: Boolean(user.must_change_password),
-      token
-    });
+    res.json(createSessionPayload(user));
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server authentication error' });
+  }
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  const { credential } = req.body;
+  if (!googleClient || !googleClientId) {
+    return res.status(503).json({ error: 'Google Sign-In is not configured' });
+  }
+  if (!credential) {
+    return res.status(400).json({ error: 'Google credential is required' });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: googleClientId,
+    });
+    const payload = ticket.getPayload();
+    const email = normalizeEmail(payload?.email);
+
+    if (!email || !payload?.email_verified) {
+      return res.status(401).json({ error: 'Google account email is not verified' });
+    }
+
+    const results = await query('SELECT * FROM users WHERE email = ?', [email]);
+    if (results.length === 0) {
+      return res.status(403).json({ error: 'This Google account is not registered in the system' });
+    }
+
+    const user = results[0];
+    if (!activeUserStatuses.includes(user.status || 'Active')) {
+      return res.status(403).json({ error: 'This user account is deactivated. Contact the System Administrator.' });
+    }
+
+    if (user.must_change_password) {
+      return res.status(403).json({ error: 'Please sign in with your temporary password and change it before using Google Sign-In.' });
+    }
+
+    await logAudit('Google Login', user.name, `Successful Google Sign-In via role: ${user.role}`);
+    res.json(createSessionPayload(user));
+  } catch (error) {
+    console.error('Google authentication failed:', error);
+    res.status(401).json({ error: 'Google Sign-In failed' });
   }
 });
 

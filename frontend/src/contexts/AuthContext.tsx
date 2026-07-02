@@ -15,6 +15,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
 }
@@ -55,6 +56,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('forensic_user', JSON.stringify(dbUser));
   };
 
+  const loginWithGoogle = async (credential: string) => {
+    const response = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ credential })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || 'Google Sign-In failed');
+    }
+
+    const dbUser: User = await response.json();
+    setUser(dbUser);
+    localStorage.setItem('forensic_user', JSON.stringify(dbUser));
+  };
+
   const changePassword = async (currentPassword: string, newPassword: string) => {
     if (!user) throw new Error('Authentication required');
 
@@ -83,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, changePassword, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, loginWithGoogle, changePassword, logout }}>
       {children}
     </AuthContext.Provider>
   );

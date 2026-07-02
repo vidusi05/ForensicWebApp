@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../../contexts/AuthContext';
 import { Activity } from 'lucide-react';
 
@@ -8,8 +9,10 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const googleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +30,23 @@ export default function Login() {
     }
   };
 
+  const handleGoogleCredential = async (credential?: string) => {
+    if (!credential) {
+      setError('Google Sign-In did not return a credential');
+      return;
+    }
+
+    setError(null);
+    setGoogleLoading(true);
+    try {
+      await loginWithGoogle(credential);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Google Sign-In failed');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -86,7 +106,7 @@ export default function Login() {
           <div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || googleLoading}
               className="group relative w-full flex justify-center py-2.5 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors disabled:opacity-50"
             >
               {loading ? 'Signing in...' : 'Sign in'}
@@ -94,6 +114,35 @@ export default function Login() {
 
           </div>
         </form>
+
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center" aria-hidden="true">
+            <div className="w-full border-t border-slate-200" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="bg-white px-2 text-slate-500">or</span>
+          </div>
+        </div>
+
+        <div className="flex justify-center">
+          {googleConfigured ? (
+            <div className={googleLoading ? 'pointer-events-none opacity-60' : ''}>
+              <GoogleLogin
+                onSuccess={(credentialResponse) => handleGoogleCredential(credentialResponse.credential)}
+                onError={() => setError('Google Sign-In failed')}
+                theme="outline"
+                size="large"
+                text="signin_with"
+                shape="rectangular"
+                width="320"
+              />
+            </div>
+          ) : (
+            <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-center text-sm font-medium text-amber-700">
+              Google Sign-In is not configured.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

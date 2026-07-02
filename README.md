@@ -90,6 +90,7 @@ PORT=5000
 NODE_ENV=production
 CLIENT_ORIGIN=http://YOUR_EC2_PUBLIC_IP
 JWT_SECRET=replace_with_a_long_random_secret
+GOOGLE_CLIENT_ID=your_google_oauth_web_client_id.apps.googleusercontent.com
 SEED_USER_PASSWORD=replace_with_the_login_password_you_want
 SEED_ADMIN_EMAIL=admin@hospital.gov
 SEED_ADMIN_NAME=System Administrator
@@ -109,6 +110,12 @@ SMTP_SECURE=false
 SMTP_USER=your_ses_smtp_username
 SMTP_PASS=your_ses_smtp_password
 TEMP_PASSWORD_EXPIRES_MINUTES=30
+```
+
+Create `frontend/.env` before building when Google Sign-In is enabled:
+
+```env
+VITE_GOOGLE_CLIENT_ID=your_google_oauth_web_client_id.apps.googleusercontent.com
 ```
 
 4. Confirm RDS connectivity from EC2:
